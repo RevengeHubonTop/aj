@@ -1,10 +1,11 @@
--- ===== KUNI AUTOJOINER STATUS UI (HACKER THEME) =====
+-- ===== KUNI AUTOJOINER STATUS UI (HACKER THEME) - CONNECTED STATUS FIX =====
 -- Paste this at the VERY TOP of your autojoiner script
 
 local Players = game:GetService("Players")
 local LP = Players.LocalPlayer
 local UserInputService = game:GetService("UserInputService")
 local TweenService = game:GetService("TweenService")
+local RunService = game:GetService("RunService")
 
 local ScreenGui = Instance.new("ScreenGui")
 ScreenGui.Name = "KUNI_Status"
@@ -65,7 +66,7 @@ end)
 
 local StatusDot = Instance.new("Frame")
 StatusDot.Parent = MainFrame
-StatusDot.BackgroundColor3 = Color3.fromRGB(255, 60, 60)
+StatusDot.BackgroundColor3 = Color3.fromRGB(0, 255, 100)
 StatusDot.Position = UDim2.new(0, 10, 0, 34)
 StatusDot.Size = UDim2.new(0, 8, 0, 8)
 
@@ -76,6 +77,194 @@ StatusLabel.Position = UDim2.new(0, 24, 0, 28)
 StatusLabel.Size = UDim2.new(1, -30, 0, 18)
 StatusLabel.Font = Enum.Font.Code
 StatusLabel.Text = "CONNECTED"
+StatusLabel.TextColor3 = Color3.fromRGB(0, 255, 100)
+StatusLabel.TextSize = 12
+StatusLabel.TextXAlignment = Enum.TextXAlignment.Left
+
+local function makeStatRow(yPos, prefix, text)
+    local row = Instance.new("TextLabel")
+    row.Parent = MainFrame
+    row.BackgroundTransparency = 1
+    row.Position = UDim2.new(0, 10, 0, yPos)
+    row.Size = UDim2.new(1, -20, 0, 16)
+    row.Font = Enum.Font.Code
+    row.Text = prefix .. text
+    row.TextColor3 = Color3.fromRGB(0, 229, 255)
+    row.TextSize = 12
+    row.TextXAlignment = Enum.TextXAlignment.Left
+    return row
+end
+
+local UptimeLabel = makeStatRow(58, "UPTIME  : ", "00:00:00")
+local QueueLabel = makeStatRow(78, "QUEUE   : ", "0")
+local TradesLabel = makeStatRow(98, "TRADES  : ", "0")
+
+local FooterLine = Instance.new("Frame")
+FooterLine.Parent = MainFrame
+FooterLine.BackgroundColor3 = Color3.fromRGB(0, 229, 255)
+FooterLine.BackgroundTransparency = 0.7
+FooterLine.BorderSizePixel = 0
+FooterLine.Position = UDim2.new(0, 10, 0, 122)
+FooterLine.Size = UDim2.new(1, -20, 0, 1)
+
+local FooterLabel = Instance.new("TextLabel")
+FooterLabel.Parent = MainFrame
+FooterLabel.BackgroundTransparency = 1
+FooterLabel.Position = UDim2.new(0, 10, 0, 126)
+FooterLabel.Size = UDim2.new(1, -20, 0, 12)
+FooterLabel.Font = Enum.Font.Code
+FooterLabel.Text = "F10 TOGGLE"
+FooterLabel.TextColor3 = Color3.fromRGB(0, 150, 170)
+FooterLabel.TextSize = 10
+FooterLabel.TextXAlignment = Enum.TextXAlignment.Left
+
+local Dragging, DragInput, DragStart, StartPos
+TitleBar.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+        Dragging = true
+        DragStart = input.Position
+        StartPos = MainFrame.Position
+    end
+end)
+TitleBar.InputChanged:Connect(function(input)
+    if (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) and Dragging then
+        local delta = input.Position - DragStart
+        MainFrame.Position = UDim2.new(
+            StartPos.X.Scale,
+            StartPos.X.Offset + delta.X,
+            StartPos.Y.Scale,
+            StartPos.Y.Offset + delta.Y
+        )
+    end
+end)
+UserInputService.InputEnded:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+        Dragging = false
+    end
+end)
+
+local startTime = tick()
+local isConnected = true
+
+-- ===== UPDATE FUNCTIONS =====
+local function pulseDot(color)
+    TweenService:Create(StatusDot, TweenInfo.new(0.3), {BackgroundColor3 = color}):Play()
+end
+
+-- Blinking dot animation
+task.spawn(function()
+    while true do
+        if isConnected then
+            StatusDot.BackgroundColor3 = Color3.fromRGB(0, 255, 100)
+            StatusLabel.Text = "CONNECTED"
+            StatusLabel.TextColor3 = Color3.fromRGB(0, 255, 100)
+            task.wait(0.5)
+            StatusDot.BackgroundColor3 = Color3.fromRGB(0, 200, 80)
+            task.wait(0.5)
+        else
+            StatusDot.BackgroundColor3 = Color3.fromRGB(255, 60, 60)
+            StatusLabel.Text = "DISCONNECTED"
+            StatusLabel.TextColor3 = Color3.fromRGB(255, 60, 60)
+            task.wait(0.5)
+            StatusDot.BackgroundColor3 = Color3.fromRGB(200, 40, 40)
+            task.wait(0.5)
+        end
+    end
+end)
+
+-- Uptime counter
+task.spawn(function()
+    while true do
+        local elapsed = tick() - startTime
+        local hours = string.format("%02d", math.floor(elapsed / 3600))
+        local minutes = string.format("%02d", math.floor((elapsed % 3600) / 60))
+        local seconds = string.format("%02d", math.floor(elapsed % 60))
+        UptimeLabel.Text = "UPTIME  : " .. hours .. ":" .. minutes .. ":" .. seconds
+        task.wait(1)
+    end
+end)
+
+-- ===== EXPOSE GLOBALS FOR OTHER SCRIPTS =====
+_G.KUNI_UI = {
+    setConnected = function(state)
+        isConnected = state
+    end,
+    setQueue = function(count)
+        QueueLabel.Text = "QUEUE   : " .. tostring(count)
+    end,
+    setTrades = function(count)
+        TradesLabel.Text = "TRADES  : " .. tostring(count)
+    end,
+    toggle = function()
+        MainFrame.Visible = not MainFrame.Visible
+    end,
+    updateUptime = function()
+        -- handled by loop
+    end,
+    frame = MainFrame,
+    statusDot = StatusDot,
+    statusLabel = StatusLabel
+}
+
+-- F10 toggle
+UserInputService.InputBegan:Connect(function(input, gameProcessed)
+    if gameProcessed then return end
+    if input.KeyCode == Enum.KeyCode.F10 then
+        MainFrame.Visible = not MainFrame.Visible
+    end
+end)
+
+-- Monitor network connection status
+task.spawn(function()
+    while true do
+        task.wait(2)
+        local success, conn = pcall(function()
+            return game:GetService("NetworkClient"):GetConnectionStatus()
+        end)
+        if success then
+            if conn == Enum.ConnectionStatus.Connected then
+                isConnected = true
+            else
+                isConnected = false
+            end
+        end
+    end
+end)
+
+print("[KUNI UI] Status UI loaded. F10 to toggle.")TitleLabel.Position = UDim2.new(0, 10, 0, 0)
+TitleLabel.Font = Enum.Font.Code
+TitleLabel.Text = "KUNI // AUTOJOINER"
+TitleLabel.TextColor3 = Color3.fromRGB(0, 229, 255)
+TitleLabel.TextSize = 13
+TitleLabel.TextXAlignment = Enum.TextXAlignment.Left
+
+local CloseBtn = Instance.new("TextButton")
+CloseBtn.Parent = TitleBar
+CloseBtn.BackgroundTransparency = 1
+CloseBtn.Position = UDim2.new(1, -22, 0, 0)
+CloseBtn.Size = UDim2.new(0, 20, 1, 0)
+CloseBtn.Font = Enum.Font.Code
+CloseBtn.Text = "X"
+CloseBtn.TextColor3 = Color3.fromRGB(0, 229, 255)
+CloseBtn.TextSize = 13
+
+CloseBtn.MouseButton1Click:Connect(function()
+    MainFrame.Visible = false
+end)
+
+local StatusDot = Instance.new("Frame")
+StatusDot.Parent = MainFrame
+StatusDot.BackgroundColor3 = Color3.fromRGB(255, 60, 60)
+StatusDot.Position = UDim2.new(0, 10, 0, 34)
+StatusDot.Size = UDim2.new(0, 8, 0, 8)
+
+local StatusLabel = Instance.new("TextLabel")
+StatusLabel.Parent = MainFrame
+StatusLabel.BackgroundTransparency = 1
+StatusLabel.Position = UDim2.new(0, 24, 0, 28)
+StatusLabel.Size = UDim2.new(1, -30, 0, 18)
+StatusLabel.Font = Enum.Font.Code
+StatusLabel.Text = "DISCONNECTED"
 StatusLabel.TextColor3 = Color3.fromRGB(255, 90, 90)
 StatusLabel.TextSize = 12
 StatusLabel.TextXAlignment = Enum.TextXAlignment.Left
