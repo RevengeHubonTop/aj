@@ -75,7 +75,7 @@ StatusLabel.BackgroundTransparency = 1
 StatusLabel.Position = UDim2.new(0, 24, 0, 28)
 StatusLabel.Size = UDim2.new(1, -30, 0, 18)
 StatusLabel.Font = Enum.Font.Code
-StatusLabel.Text = "DISCONNECTED"
+StatusLabel.Text = "CONNECTED"
 StatusLabel.TextColor3 = Color3.fromRGB(255, 90, 90)
 StatusLabel.TextSize = 12
 StatusLabel.TextXAlignment = Enum.TextXAlignment.Left
@@ -148,66 +148,3 @@ local function pulseDot(color)
     TweenService:Create(StatusDot, TweenInfo.new(0.3), {BackgroundColor3 = color}):Play()
 end
 
-function UpdateUI()
-    local elapsed = tick() - startTime
-    local hours = math.floor(elapsed / 3600)
-    local minutes = math.floor((elapsed % 3600) / 60)
-    local seconds = math.floor(elapsed % 60)
-    UptimeLabel.Text = string.format("UPTIME  : %02d:%02d:%02d", hours, minutes, seconds)
-end
-
-_G.KUNI_UI = {
-    SetStatus = function(text, color, dotColor)
-        StatusLabel.Text = text
-        StatusLabel.TextColor3 = color or Color3.fromRGB(0, 229, 255)
-        if dotColor then
-            pulseDot(dotColor)
-        end
-    end,
-    SetQueue = function(count)
-        QueueLabel.Text = "QUEUE   : " .. tostring(count)
-    end,
-    SetTrades = function(count)
-        TradesLabel.Text = "TRADES  : " .. tostring(count)
-    end,
-    SetConnected = function()
-        pulseDot(Color3.fromRGB(0, 255, 140))
-        StatusLabel.Text = "CONNECTED"
-        StatusLabel.TextColor3 = Color3.fromRGB(0, 255, 140)
-    end,
-    SetConnecting = function()
-        pulseDot(Color3.fromRGB(255, 200, 0))
-        StatusLabel.Text = "CONNECTING..."
-        StatusLabel.TextColor3 = Color3.fromRGB(255, 200, 0)
-    end,
-    SetDisconnected = function()
-        pulseDot(Color3.fromRGB(255, 60, 60))
-        StatusLabel.Text = "DISCONNECTED"
-        StatusLabel.TextColor3 = Color3.fromRGB(255, 90, 90)
-    end,
-    Toggle = function()
-        MainFrame.Visible = not MainFrame.Visible
-    end
-}
-
-task.spawn(function()
-    while true do
-        if MainFrame.Visible then
-            UpdateUI()
-        end
-        task.wait(1)
-    end
-end)
-
-UserInputService.InputBegan:Connect(function(input, gameProcessed)
-    if gameProcessed then return end
-    if input.KeyCode == Enum.KeyCode.F10 then
-        _G.KUNI_UI.Toggle()
-    end
-end)
-
-_G.KUNI_UI.SetDisconnected()
-
-print("KUNI Status UI Loaded (Hacker Theme) - Press F10 to toggle")
-
--- ===== NOW PASTE YOUR AUTOJOINER CODE BELOW =====
