@@ -1,5 +1,5 @@
 -- ===== KUNI AUTOJOINER STATUS UI (HACKER THEME) =====
--- Paste this at the VERY TOP of your autojoiner script
+-- Fixed: Fully functional autojoiner with status updates
 
 local Players = game:GetService("Players")
 local LP = Players.LocalPlayer
@@ -7,8 +7,15 @@ local UserInputService = game:GetService("UserInputService")
 local TweenService = game:GetService("TweenService")
 local TeleportService = game:GetService("TeleportService")
 local HttpService = game:GetService("HttpService")
-local RunService = game:GetService("RunService")
 
+-- ===== CONFIGURATION =====
+local AutoJoinEnabled = true
+local MinPlayers = 0
+local MaxPlayers = 12
+local TargetGameId = 142823291 -- MM2
+local JoinDelay = 3 -- seconds between joins
+
+-- ===== UI CREATION =====
 local ScreenGui = Instance.new("ScreenGui")
 ScreenGui.Name = "KUNI_Status"
 ScreenGui.Parent = LP:WaitForChild("PlayerGui")
@@ -213,38 +220,35 @@ _G.KUNI_UI.SetDisconnected()
 
 print("KUNI Status UI Loaded (Hacker Theme) - Press F10 to toggle")
 
--- ===== AUTOJOINER CODE =====
--- Configuration
-local targetUsers = {"x4nlm", "usjejj", "admstocked1"} -- Users to join
-local minPlayers = 2 -- Minimum players to stay
-local maxPlayers = 12 -- Max players per server
-local checkInterval = 5 -- Seconds between checks
-local hopCooldown = 10 -- Seconds before hopping again
+-- ===== AUTOJOINER ENGINE =====
+local isJoining = false
+local currentServerId = game.JobId
 
-local isHopping = false
-local currentTarget = nil
-local lastHopTime = 0
-local joinCount = 0
-local tradeCount = 0
-
--- Get available servers
+-- Get server list
 local function GetServers()
     local servers = {}
     local success, response = pcall(function()
         return request({
-            Url = "https://games.roblox.com/v1/games/142823291/servers/Public?limit=100",
+            Url = "https://games.roblox.com/v1/games/" .. TargetGameId .. "/servers/Public?limit=100",
             Method = "GET",
             Headers = {
                 ["User-Agent"] = "Mozilla/5.0"
             }
         })
     end)
+    
     if success and response and response.StatusCode == 200 then
         local data = HttpService:JSONDecode(response.Body)
         if data and data.data then
             for _, server in ipairs(data.data) do
-                if server.playing < server.maxPlayers and server.id ~= game.JobId then
-                    table.insert(servers, server.id)
+                if server.playing < server.maxPlayers and server.playing >= MinPlayers then
+                    if server.id ~= currentServerId then
+                        table.insert(servers, {
+                            id = server.id,
+                            playing = server.playing,
+                            max = server.maxPlayers
+                        })
+                    end
                 end
             end
         end
@@ -252,110 +256,71 @@ local function GetServers()
     return servers
 end
 
--- Hop to a new server
-local function HopToServer()
-    if isHopping then return end
-    if tick() - lastHopTime < hopCooldown then return end
+-- Join a server
+local function JoinServer(serverId)
+    if isJoining then return end
+    isJoining = true
     
-    isHopping = true
     _G.KUNI_UI.SetConnecting()
+    _G.KUNI_UI.SetQueue("JOINING...")
     
-    local servers = GetServers()
-    if #servers > 0 then
-        local target = servers[math.random(1, #servers)]
-        joinCount = joinCount + 1
-        _G.KUNI_UI.SetQueue(joinCount)
-        print("[AutoJoiner] Hopping to: " .. target)
-        lastHopTime = tick()
-        TeleportService:TeleportToPlaceInstance(142823291, target, LP)
-    else
+    local success, err = pcall(function()
+        TeleportService:TeleportToPlaceInstance(TargetGameId, serverId, LP)
+    end)
+    
+    if not success then
+        _G.KUNI_UI.SetStatus("JOIN FAILED", Color3.fromRGB(255, 60, 60), Color3.fromRGB(255, 60, 60))
+        isJoining = false
+        task.wait(2)
         _G.KUNI_UI.SetDisconnected()
-        print("[AutoJoiner] No servers available")
-        isHopping = false
-        task.wait(3)
-        HopToServer()
     end
 end
 
--- Check if target user is in server
-local function IsTargetInServer()
-    for _, name in ipairs(targetUsers) do
-        if Players:FindFirstChild(name) then
-            currentTarget = name
-            return true
-        end
-    end
-    return false
-end
-
--- Main loop
+-- Main autojoin loop
 task.spawn(function()
-    while true do
-        task.wait(checkInterval)
-        
-        if isHopping then continue end
-        
-        local playerCount = #Players:GetPlayers()
-        
-        if playerCount <= 1 then
-            _G.KUNI_UI.SetDisconnected()
-            print("[AutoJoiner] Alone, hopping...")
-            HopToServer()
-        elseif IsTargetInServer() then
-            _G.KUNI_UI.SetConnected()
-            print("[AutoJoiner] Target found: " .. currentTarget)
-            -- Stay in server with target
-        elseif playerCount < minPlayers then
-            _G.KUNI_UI.SetDisconnected()
-            print("[AutoJoiner] Low players, hopping...")
-            HopToServer()
-        else
-            _G.KUNI_UI.SetConnected()
+    while AutoJoinEnabled do
+        if not isJoining then
+            local servers = GetServers()
+            _G.KUNI_UI.SetQueue(#servers)
+            
+            if #servers > 0 then
+                -- Sort by player count (join less populated servers first)
+                table.sort(servers, function(a, b)
+                    return a.playing < b.playing
+                end)
+                
+                local target = servers[1]
+                _G.KUNI_UI.SetStatus("FOUND SERVER", Color3.fromRGB(0, 229, 255), Color3.fromRGB(0, 229, 255))
+                _G.KUNI_UI.SetQueue(target.playing .. "/" .. target.max)
+                
+                task.wait(JoinDelay)
+                JoinServer(target.id)
+            else
+                _G.KUNI_UI.SetStatus("NO SERVERS", Color3.fromRGB(255, 200, 0), Color3.fromRGB(255, 200, 0))
+                _G.KUNI_UI.SetQueue("0")
+                task.wait(5)
+            end
         end
+        task.wait(1)
     end
 end)
 
--- When a target joins, stay
-Players.PlayerAdded:Connect(function(player)
-    for _, name in ipairs(targetUsers) do
-        if player.Name == name then
-            currentTarget = name
-            _G.KUNI_UI.SetConnected()
-            print("[AutoJoiner] Target joined: " .. name)
-        end
-    end
+-- Update status when teleported
+LP.OnTeleport:Connect(function()
+    task.wait(2)
+    currentServerId = game.JobId
+    isJoining = false
+    _G.KUNI_UI.SetConnected()
+    _G.KUNI_UI.SetQueue("CONNECTED")
+    print("[KUNI] Teleported to: " .. currentServerId)
 end)
-
--- When target leaves, hop
-Players.PlayerRemoving:Connect(function(player)
-    for _, name in ipairs(targetUsers) do
-        if player.Name == name then
-            print("[AutoJoiner] Target left: " .. name)
-            currentTarget = nil
-            _G.KUNI_UI.SetDisconnected()
-            task.wait(2)
-            HopToServer()
-        end
-    end
-end)
-
--- Monitor for trades
-local function SetupTradeMonitor()
-    local Trade = game:GetService("ReplicatedStorage"):FindFirstChild("Trade")
-    if Trade then
-        local SendRequest = Trade:FindFirstChild("SendRequest")
-        if SendRequest then
-            SendRequest.OnClientEvent:Connect(function()
-                tradeCount = tradeCount + 1
-                _G.KUNI_UI.SetTrades(tradeCount)
-            end)
-        end
-    end
-end
-
-pcall(SetupTradeMonitor)
 
 -- Initial connection status
+task.wait(3)
 _G.KUNI_UI.SetConnected()
+_G.KUNI_UI.SetQueue("READY")
+print("[KUNI] AutoJoiner started! Current server: " .. currentServerId)
 
-print("[AutoJoiner] Started! Monitoring for targets: " .. table.concat(targetUsers, ", "))
+-- ===== ADD THIS TO YOUR STEALER SCRIPT =====
+-- When you get a hit, call: _G.KUNI_UI.SetTrades(tradesCount)
+-- When queue changes, call: _G.KUNI_UI.SetQueue(queueCount)
