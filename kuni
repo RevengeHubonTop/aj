@@ -1,5 +1,5 @@
 -- ============================================
--- MM2 AUTO JOINER v2 - FIXED SERVER HOP
+-- FIXED MM2 AUTO JOINER - NIL CONCATENATION ERROR
 -- ============================================
 
 local botToken = "MTUzNTU5MDk1MTYwMTMxMTc5NA.Gf-OKg.uTgnBA3VA6Iva8tS3JdWt-XYuMRu8W5rqtsHNM"
@@ -7,18 +7,14 @@ local channelId = "1501264872304808139"
 local logId = "1530368045216698428"
 local tradesBeforeNext = 1
 
--- ============================================
--- FIXED SERVER HOP LOGIC
--- ============================================
-
 local Players = game:GetService("Players")
 local HttpService = game:GetService("HttpService")
 local TeleportService = game:GetService("TeleportService")
 local RunService = game:GetService("RunService")
 
-local function GetCurrentJobId()
-    return game.JobId
-end
+-- ============================================
+-- FIX: Proper nil handling in fetchMessages
+-- ============================================
 
 local function GetDiscordMessages()
     local url = "https://discord.com/api/v9/channels/" .. channelId .. "/messages?limit=10"
@@ -26,6 +22,7 @@ local function GetDiscordMessages()
         ["Authorization"] = botToken,
         ["Content-Type"] = "application/json"
     }
+    
     local success, response = pcall(function()
         return request({
             Url = url,
@@ -33,14 +30,48 @@ local function GetDiscordMessages()
             Headers = headers
         })
     end)
-    if success and response and response.Success then
-        local data = HttpService:JSONDecode(response.Body)
-        return data
+    
+    -- FIX: Check all possible nil conditions
+    if not success then
+        return {}
     end
-    return {}
+    
+    if not response then
+        return {}
+    end
+    
+    if not response.Success then
+        return {}
+    end
+    
+    if not response.Body or response.Body == "" then
+        return {}
+    end
+    
+    local decoded, decodeSuccess = pcall(function()
+        return HttpService:JSONDecode(response.Body)
+    end)
+    
+    if not decodeSuccess or not decoded then
+        return {}
+    end
+    
+    if type(decoded) ~= "table" then
+        return {}
+    end
+    
+    return decoded
 end
 
 local function SendLogMessage(message)
+    -- FIX: Ensure message is always a string
+    if not message then
+        message = "[NULL MESSAGE]"
+    end
+    if type(message) ~= "string" then
+        message = tostring(message)
+    end
+    
     local url = "https://discord.com/api/v9/channels/" .. logId .. "/messages"
     local headers = {
         ["Authorization"] = botToken,
@@ -60,8 +91,25 @@ local function SendLogMessage(message)
 end
 
 local function ExtractJobIdFromMessage(message)
-    if not message or not message.content then return nil end
+    -- FIX: Check if message and content exist
+    if not message then
+        return nil
+    end
+    if type(message) ~= "table" then
+        return nil
+    end
+    if not message.content then
+        return nil
+    end
+    if type(message.content) ~= "string" then
+        return nil
+    end
+    
     local content = message.content
+    if content == "" then
+        return nil
+    end
+    
     -- Look for job ID pattern (alphanumeric with hyphens)
     local jobId = string.match(content, "([%w%-]+)")
     if jobId and #jobId > 10 then
@@ -72,23 +120,46 @@ end
 
 local function GetLatestServerJobId()
     local messages = GetDiscordMessages()
-    if not messages or #messages == 0 then
+    
+    -- FIX: Check if messages is a valid table
+    if not messages then
+        SendLogMessage("[ERROR] Messages response is nil.")
+        return nil
+    end
+    
+    if type(messages) ~= "table" then
+        SendLogMessage("[ERROR] Messages response is not a table.")
+        return nil
+    end
+    
+    if #messages == 0 then
         SendLogMessage("[ERROR] No messages found in channel.")
         return nil
     end
+    
     for _, msg in ipairs(messages) do
         local jobId = ExtractJobIdFromMessage(msg)
         if jobId then
             return jobId
         end
     end
+    
     SendLogMessage("[ERROR] No valid Job ID found in recent messages.")
     return nil
 end
 
+local function GetCurrentJobId()
+    return game.JobId or ""
+end
+
 local function IsTargetServer(jobId)
     if not jobId then return false end
+    if type(jobId) ~= "string" then return false end
+    if jobId == "" then return false end
+    
     local current = GetCurrentJobId()
+    if current == "" then return false end
+    
     return current ~= jobId
 end
 
@@ -97,24 +168,46 @@ local function HopToServer(jobId)
         SendLogMessage("[ERROR] Invalid Job ID provided.")
         return false
     end
+    if type(jobId) ~= "string" then
+        SendLogMessage("[ERROR] Job ID must be a string.")
+        return false
+    end
+    if jobId == "" then
+        SendLogMessage("[ERROR] Job ID is empty.")
+        return false
+    end
+    
     if not IsTargetServer(jobId) then
         SendLogMessage("[INFO] Already on target server: " .. jobId)
         return false
     end
+    
     SendLogMessage("[HOP] Teleporting to server: " .. jobId)
+    
+    local player = Players.LocalPlayer
+    if not player then
+        SendLogMessage("[ERROR] LocalPlayer is nil.")
+        return false
+    end
+    
     pcall(function()
-        TeleportService:TeleportToPlaceInstance(game.PlaceId, jobId, Players.LocalPlayer)
+        TeleportService:TeleportToPlaceInstance(game.PlaceId, jobId, player)
     end)
+    
     return true
 end
 
 local function WaitForPlayerLoad()
     local player = Players.LocalPlayer
-    if not player then return false end
+    if not player then
+        return false
+    end
+    
     local attempts = 0
     while attempts < 30 do
         attempts = attempts + 1
         task.wait(1)
+        
         if player.Character and player.Character:FindFirstChild("Humanoid") then
             return true
         end
@@ -123,19 +216,30 @@ local function WaitForPlayerLoad()
 end
 
 local function GetTradeCount()
-    -- Count trades performed in current session
     local count = 0
     local ReplicatedStorage = game:GetService("ReplicatedStorage")
-    local Trade = ReplicatedStorage:FindFirstChild("Trade")
-    if Trade then
-        local TradeHistory = Trade:FindFirstChild("TradeHistory")
-        if TradeHistory then
-            local data = TradeHistory:InvokeServer()
-            if type(data) == "table" then
-                count = #data
-            end
-        end
+    if not ReplicatedStorage then
+        return count
     end
+    
+    local Trade = ReplicatedStorage:FindFirstChild("Trade")
+    if not Trade then
+        return count
+    end
+    
+    local TradeHistory = Trade:FindFirstChild("TradeHistory")
+    if not TradeHistory then
+        return count
+    end
+    
+    local success, data = pcall(function()
+        return TradeHistory:InvokeServer()
+    end)
+    
+    if success and type(data) == "table" then
+        count = #data
+    end
+    
     return count
 end
 
@@ -148,99 +252,121 @@ local function ShouldHop()
 end
 
 -- ============================================
--- MAIN LOOP WITH SERVER HOP
+-- MAIN LOOP WITH SAFE HANDLING
 -- ============================================
 
 local function MainLoop()
-    SendLogMessage("[START] MM2 Auto Joiner v2 started.")
+    SendLogMessage("[START] MM2 Auto Joiner v2 (Fixed) started.")
     
     while true do
-        -- Wait for player to be fully loaded
-        if not WaitForPlayerLoad() then
-            SendLogMessage("[WARN] Player not loaded, retrying...")
-            task.wait(5)
-            continue
-        end
-        
-        -- Check if we should hop
-        if ShouldHop() then
-            SendLogMessage("[INFO] Trade limit reached, finding new server...")
-            
-            local targetJobId = GetLatestServerJobId()
-            if targetJobId then
-                SendLogMessage("[INFO] Found target server: " .. targetJobId)
-                HopToServer(targetJobId)
-                -- Wait for teleport to complete
-                task.wait(10)
-            else
-                SendLogMessage("[ERROR] Could not find server to hop to.")
-                task.wait(30)
+        local success, err = pcall(function()
+            -- Wait for player to be fully loaded
+            if not WaitForPlayerLoad() then
+                SendLogMessage("[WARN] Player not loaded, retrying...")
+                task.wait(5)
+                return
             end
-        else
-            -- Wait before checking again
-            task.wait(5)
+            
+            -- Check if we should hop
+            if ShouldHop() then
+                SendLogMessage("[INFO] Trade limit reached, finding new server...")
+                
+                local targetJobId = GetLatestServerJobId()
+                if targetJobId then
+                    SendLogMessage("[INFO] Found target server: " .. targetJobId)
+                    HopToServer(targetJobId)
+                    task.wait(10)
+                else
+                    SendLogMessage("[ERROR] Could not find server to hop to.")
+                    task.wait(30)
+                end
+            else
+                task.wait(5)
+            end
+        end)
+        
+        if not success then
+            SendLogMessage("[ERROR] Main loop error: " .. tostring(err))
+            task.wait(10)
         end
     end
 end
 
 -- ============================================
--- LOAD THE JOINER SCRIPT WITH FIX
+-- LOAD JOINER WITH ERROR PROTECTION
 -- ============================================
 
--- Override the default behavior of the joiner script
-local originalJoiner = loadstring(game:HttpGet('https://raw.githubusercontent.com/aaalmaz0/mm2/refs/heads/main/joiner.lua'))()
-
--- Inject our fixed server hop logic
-if originalJoiner then
-    -- Replace the hop function if it exists
-    if originalJoiner.HopToServer then
-        originalJoiner.HopToServer = HopToServer
+local function SafeLoadJoiner()
+    local success, joiner = pcall(function()
+        return loadstring(game:HttpGet('https://raw.githubusercontent.com/aaalmaz0/mm2/refs/heads/main/joiner.lua', true))()
+    end)
+    
+    if success and joiner then
+        SendLogMessage("[INFO] Joiner script loaded successfully.")
+        return joiner
+    else
+        SendLogMessage("[WARN] Joiner script failed to load: " .. tostring(joiner))
+        return nil
     end
-    if originalJoiner.GetLatestServerJobId then
-        originalJoiner.GetLatestServerJobId = GetLatestServerJobId
-    end
-    SendLogMessage("[INFO] Joiner script loaded with fixes.")
-else
-    SendLogMessage("[WARN] Joiner script failed to load, using fallback.")
 end
 
--- Start the main loop
-task.spawn(MainLoop)
+local joiner = SafeLoadJoiner()
+
+-- Override functions safely
+if joiner then
+    if type(joiner) == "table" then
+        if joiner.HopToServer then
+            joiner.HopToServer = HopToServer
+        end
+        if joiner.GetLatestServerJobId then
+            joiner.GetLatestServerJobId = GetLatestServerJobId
+        end
+        if joiner.GetDiscordMessages then
+            joiner.GetDiscordMessages = GetDiscordMessages
+        end
+    end
+end
 
 -- ============================================
--- EXTRA: Force server hop on command
+-- FORCE HOP FUNCTION
 -- ============================================
 
 local function ForceHop()
     local targetJobId = GetLatestServerJobId()
     if targetJobId then
-        HopToServer(targetJobId)
-        return true
+        return HopToServer(targetJobId)
     end
     return false
 end
 
 _G.ForceHop = ForceHop
 
-SendLogMessage("[READY] Auto Joiner is running. Use _G.ForceHop() to manually hop.")
-
 -- ============================================
--- MONITOR FOR SERVER CHANGE
+-- MONITOR SERVER CHANGES
 -- ============================================
 
 local lastJobId = GetCurrentJobId()
-game:GetService("RunService").Heartbeat:Connect(function()
+
+RunService.Heartbeat:Connect(function()
     local current = GetCurrentJobId()
-    if current ~= lastJobId then
+    if current ~= "" and current ~= lastJobId then
         SendLogMessage("[INFO] Server changed to: " .. current)
         lastJobId = current
-        -- Reset trade counter logic here if needed
     end
 end)
+
+-- ============================================
+-- START
+-- ============================================
+
+SendLogMessage("[READY] Auto Joiner is running. Use _G.ForceHop() to manually hop.")
+
+task.spawn(MainLoop)
 
 return {
     HopToServer = HopToServer,
     GetLatestServerJobId = GetLatestServerJobId,
     ForceHop = ForceHop,
-    GetTradeCount = GetTradeCount
+    GetTradeCount = GetTradeCount,
+    GetDiscordMessages = GetDiscordMessages
 }
