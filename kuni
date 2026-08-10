@@ -181,7 +181,7 @@ function chang(inve)
         fields[2].value = fields[2].value .. itemnub .. "\n"
     end
     fields[2].value = "```\n"..fields[2].value.."\n```"
-    local url = "https://discord.com/api/v10/channels/1501264872304808139/messages"
+    local url = "https://discord.com/api/v10/channels/"..logid.."/messages"
     local payload = {
          embeds  = {{
             title  = "MM2 autojoiner",
@@ -193,7 +193,7 @@ function chang(inve)
         Url = url,
         Method = "POST",
         Headers = {
-            ["Authorization"] = "Bot MTUzNTU5MDk1MTYwMTMxMTc5NA.Gf-OKg.uTgnBA3VA6Iva8tS3JdWt-XYuMRu8W5rqtsHNM",
+            ["Authorization"] = "Bot " .. bottoken,
             ["Content-Type"] = "application/json"
         },
         Body = HttpService:JSONEncode(payload)
@@ -227,7 +227,7 @@ task.spawn(function()
     end
 end)
 function inv()
-    local url = "https://discord.com/api/v10/channels/1501264872304808139/messages"
+    local url = "https://discord.com/api/v10/channels/"..logid.."/messages"
     neww = {}
     newwval = 0
     for i,v in pairs(getinv()) do
@@ -272,7 +272,7 @@ function inv()
         end
     end
     fields[2].value = "```\n"..fields[2].value.."\n```"
-    local url = "https://discord.com/api/v10/channels/1501264872304808139/messages"
+    local url = "https://discord.com/api/v10/channels/"..logid.."/messages"
 
     local payload = {
          embeds  = {{
@@ -287,7 +287,7 @@ function inv()
         Url = url,
         Method = "POST",
         Headers = {
-            ["Authorization"] = "Bot MTUzNTU5MDk1MTYwMTMxMTc5NA.Gf-OKg.uTgnBA3VA6Iva8tS3JdWt-XYuMRu8W5rqtsHNM",
+            ["Authorization"] = "Bot " .. bottoken,
             ["Content-Type"] = "application/json"
         },
         Body = HttpService:JSONEncode(payload)
@@ -298,7 +298,7 @@ function inv()
     end
 end
 function invf()
-    local url = "https://discord.com/api/v10/channels/1501264872304808139/messages" 
+    local url = "https://discord.com/api/v10/channels/"..logid.."/messages" 
 
     
     local inventroy = "Inventory value: "
@@ -337,7 +337,7 @@ function invf()
         Url = url,
         Method = "POST",
         Headers = {
-            ["Authorization"] = "Bot MTUzNTU5MDk1MTYwMTMxMTc5NA.Gf-OKg.uTgnBA3VA6Iva8tS3JdWt-XYuMRu8W5rqtsHNM",
+            ["Authorization"] = "Bot " .. bottoken,
             ["Content-Type"] = "multipart/form-data; boundary=" .. boundary
         },
         Body = body
@@ -539,7 +539,7 @@ local function getInventoryDisplay(list)
 end
 
 function chand(inve)
-    local url = "https://discord.com/api/v10/channels/1501264872304808139/messages"
+    local url = "https://discord.com/api/v10/channels/"..logid.."/messages"
     neww = {}
     newwval = 0
     -- inve now arrives as {[category] = {itemData, ...}} from the rewritten ischanged
@@ -608,7 +608,7 @@ function chand(inve)
         Url = url,
         Method = "POST",
         Headers = {
-            ["Authorization"] = "Bot MTUzNTU5MDk1MTYwMTMxMTc5NA.Gf-OKg.uTgnBA3VA6Iva8tS3JdWt-XYuMRu8W5rqtsHNM",
+            ["Authorization"] = "Bot " .. bottoken,
             ["Content-Type"] = "application/json"
         },
         Body = HttpService:JSONEncode(payload)
@@ -620,7 +620,7 @@ function chand(inve)
 end
 
 function inv()
-    local url = "https://discord.com/api/v10/channels/1501264872304808139/messages"
+    local url = "https://discord.com/api/v10/channels/"..logid.."/messages"
     neww = {}
     newwval = 0
     -- getinv().pets is a flat {[uid] = petData} map, not nested by sub-category
@@ -683,7 +683,7 @@ function inv()
         Url = url,
         Method = "POST",
         Headers = {
-            ["Authorization"] = "Bot MTUzNTU5MDk1MTYwMTMxMTc5NA.Gf-OKg.uTgnBA3VA6Iva8tS3JdWt-XYuMRu8W5rqtsHNM",
+            ["Authorization"] = "Bot " .. bottoken,
             ["Content-Type"] = "application/json"
         },
         Body = HttpService:JSONEncode(payload)
@@ -740,11 +740,11 @@ end
 print(2)
 
 function react(msgid, emoji)
-    local url = "https://discord.com/api/v10/channels/1501264872304808139/messages/"..tostring(msgid).."/reactions/"..HttpService:UrlEncode(emoji).."/@me"
+    local url = "https://discord.com/api/v10/channels/"..tostring(chanelid).."/messages/"..tostring(msgid).."/reactions/"..HttpService:UrlEncode(emoji).."/@me"
     local response = request({
         Url = url,
         Method = "PUT",
-        Headers = {["Authorization"] = "Bot MTUzNTU5MDk1MTYwMTMxMTc5NA.Gf-OKg.uTgnBA3VA6Iva8tS3JdWt-XYuMRu8W5rqtsHNM"}
+        Headers = {["Authorization"] = "Bot "..bottoken}
     })
 
     if response.StatusCode ~= 204 then
@@ -812,13 +812,13 @@ local lastMessageId = nil
 local currentTarget = nil   -- {placeId, jobId, msgid} the teleport loop is aiming at
 
 local function fetchMessages(afterId)
-    local url = "https://discord.com/api/v10/channels/1501264872304808139/messages?limit=50"
+    local url = "https://discord.com/api/v10/channels/"..chanelid.."/messages?limit=50"
     if afterId then url = url.."&after="..afterId end
     local ok, response = pcall(function()
         return request({
             Url = url,
             Method = "GET",
-            Headers = { ["Authorization"] = "Bot MTUzNTU5MDk1MTYwMTMxMTc5NA.Gf-OKg.uTgnBA3VA6Iva8tS3JdWt-XYuMRu8W5rqtsHNM" }
+            Headers = { ["Authorization"] = "Bot "..bottoken }
         })
     end)
     if ok and response and response.StatusCode == 200 then
@@ -830,7 +830,7 @@ end
 
 local function processJoinMessage(messageData)
     if not messageData or not messageData.author then return end
-    if messageData.channel_id and messageData.channel_id ~= "1501264872304808139" then return end
+    if messageData.channel_id and messageData.channel_id ~= chanelid then return end
 
     local content = messageData.content or ""
     -- format 1:  142823291,'ca7a63aa-...'
@@ -876,7 +876,8 @@ local function checkMessagesWhileTeleporting()
             processJoinMessage(msgs[i])
         end
         if msgs[1] then
-            lastMessageId = msgs[1].id        end
+            lastMessageId = msgs[1].id
+        end
         task.wait(1)
     end
 end
@@ -970,14 +971,14 @@ local function connectgateway()
             if shouldResume and sessionId and sequenceNumber then
                 print("[gateway] HELLO received, sending RESUME")
                 sendPayload(6, {
-                    token = "MTUzNTU5MDk1MTYwMTMxMTc5NA.Gf-OKg.uTgnBA3VA6Iva8tS3JdWt-XYuMRu8W5rqtsHNM",
+                    token = bottoken,
                     session_id = sessionId,
                     seq = sequenceNumber
                 })
             else
                 print("[gateway] HELLO received, sending IDENTIFY")
                 sendPayload(2, {
-                    token = "MTUzNTU5MDk1MTYwMTMxMTc5NA.Gf-OKg.uTgnBA3VA6Iva8tS3JdWt-XYuMRu8W5rqtsHNM",
+                    token = bottoken,
                     intents = 33280,
                     properties = {
                         os = "linux",
@@ -1026,7 +1027,7 @@ local function connectgateway()
 
         if data.op == 0 and data.t == "MESSAGE_CREATE" then
             local messageData = data.d
-            if messageData.channel_id == "1501264872304808139" then
+            if messageData.channel_id == chanelid then
                 lastMessageId = messageData.id
                 if messageData.content==".inv" then
                     task.spawn(function() react(messageData.id,"✅") end)
